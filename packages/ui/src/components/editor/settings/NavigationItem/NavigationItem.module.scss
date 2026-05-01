@@ -1,0 +1,36 @@
+.container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+  border-radius: 4px;
+  color: var(--vscode-foreground);
+  text-decoration: none;
+  cursor: pointer;
+  height: 30px;
+
+  &:hover {
+    background-color: var(--cwc-bg-tertiary);
+    text-decoration: none;
+  }
+
+  &--active {
+    background-color: var(--cwc-bg-secondary);
+
+    &:hover {
+      background-color: var(--cwc-bg-secondary);
+    }
+  }
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.warning {
+  display: flex;
+  color: var(--cwc-text-color-orange);
+}

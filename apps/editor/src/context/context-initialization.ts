@@ -1,0 +1,473 @@
+import * as vscode from 'vscode'
+import * as path from 'path'
+import {
+  WorkspaceProvider,
+  FileItem
+} from './providers/workspace/workspace-provider'
+import { FilesCollector } from '../utils/files-collector'
+import { OpenEditorsProvider } from './providers/open-editors/open-editors-provider'
+import { SharedContextState } from './shared-context-state'
+import { EventEmitter } from 'events'
+import { dictionary } from '@shared/constants/dictionary'
+import {
+  CONTEXT_CHECKED_PATHS_STATE_KEY,
+  CONTEXT_CHECKED_TIMESTAMPS_STATE_KEY,
+  DUPLICATE_WORKSPACE_CONTEXT_STATE_KEY,
+  RANGES_STATE_KEY,
+  type DuplicateWorkspaceContext
+} from '../constants/state-keys'
+import { ContextProvider } from './providers/context/context-provider'
+import { is_binary_file } from '../utils/is-binary'
+
+export const token_count_emitter = new EventEmitter()
+
+const round_token_count_for_badge = (count: number): number => {
+  if (count < 1000) {
+    return count
+  }
+  return Math.floor(count / 1000) * 1000
+}
+
+const restore_duplicated_workspace_context = async (
+  context: vscode.ExtensionContext
+) => {
+  const duplicated_context = context.globalState.get<DuplicateWorkspaceContext>(
+    DUPLICATE_WORKSPACE_CONTEXT_STATE_KEY
+  )
+
+  if (duplicated_context?.timestamp) {
+    const now = Date.now()
+    const age = now - duplicated_context.timestamp
+
+    if (age <= 60000) {
+      const current_workspace_folders =
+        vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath) ??
+        []
+
+      const sorted_current_folders = [...current_workspace_folders].sort()
+      const sorted_saved_folders = [
+        ...(duplicated_context.workspace_root_folders ?? [])
+      ].sort()
+
+      const are_workspaces_the_same =
+        sorted_current_folders.length == sorted_saved_folders.length &&
+        sorted_current_folders.every(
+          (value, index) => value == sorted_saved_folders[index]
+        )
+      if (are_workspaces_the_same) {
+        await context.workspaceState.update(
+          CONTEXT_CHECKED_PATHS_STATE_KEY,
+          duplicated_context.checked_files
+        )
+
+        await context.workspaceState.update(
+          CONTEXT_CHECKED_TIMESTAMPS_STATE_KEY,
+          duplicated_context.checked_files_timestamps
+        )
+
+        if (duplicated_context.ranges) {
+          await context.workspaceState.update(
+            RANGES_STATE_KEY,
+            duplicated_context.ranges
+          )
+        }
+        if (duplicated_context.open_editors) {
+          for (const editor_info of duplicated_context.open_editors) {
+            try {
+              const uri = vscode.Uri.file(editor_info.path)
+              const document = await vscode.workspace.openTextDocument(uri)
+              await vscode.window.showTextDocument(document, {
+                viewColumn: editor_info.view_column,
+                preview: false
+              })
+            } catch (error) {
+              console.error(
+                `Failed to restore open editor for ${editor_info.path}:`,
+                error
+              )
+            }
+          }
+        }
+      }
+    }
+
+    await context.globalState.update(
+      DUPLICATE_WORKSPACE_CONTEXT_STATE_KEY,
+      undefined
+    )
+  }
+}
+
+export const context_initialization = async (
+  context: vscode.ExtensionContext
+): Promise<{
+  workspace_provider: WorkspaceProvider
+  open_editors_provider: OpenEditorsProvider
+  shared_context_state: SharedContextState
+}> => {
+  await restore_duplicated_workspace_context(context)
+
+  const workspace_folders = vscode.workspace.workspaceFolders ?? []
+
+  let workspace_view: vscode.TreeView<FileItem>
+
+  const shared_context_state = new SharedContextState()
+
+  const workspace_provider = new WorkspaceProvider({
+    workspace_folders,
+    context
+  })
+  const context_provider = new ContextProvider(workspace_provider)
+  context.subscriptions.push(context_provider)
+
+  const open_editors_provider = new OpenEditorsProvider({
+    workspace_folders,
+    workspace_provider,
+    shared_context_state
+  })
+
+  const files_collector = new FilesCollector({
+    workspace_provider,
+    open_editors_provider
+  })
+
+  const update_view_badges = async () => {
+    let context_token_count = 0
+    if (context_provider && context_view) {
+      const token_counts =
+        await workspace_provider.get_checked_files_token_count()
+      const files_count = workspace_provider.use_shrink_token_count
+        ? token_counts.shrink
+        : token_counts.total
+      context_token_count = files_count
+
+      workspace_view.badge = {
+        value: round_token_count_for_badge(context_token_count),
+        tooltip: context_token_count
+          ? `About ${context_token_count} tokens in context`
+          : ''
+      }
+      context_view.badge = undefined
+    }
+    token_count_emitter.emit('token-count-updated', context_token_count)
+  }
+
+  shared_context_state.set_providers(workspace_provider, open_editors_provider)
+
+  context.subscriptions.push({
+    dispose: () => shared_context_state.dispose()
+  })
+
+  const register_workspace_view_handlers = (
+    view: vscode.TreeView<FileItem>
+  ) => {
+    view.onDidChangeCheckboxState(async (e) => {
+      for (const [item, state] of e.items) {
+        await workspace_provider!.update_check_state(item, state)
+      }
+    })
+
+    // Fix for issue when the collapsed item has some of its children selected
+    view.onDidCollapseElement(() => {
+      workspace_provider!.refresh()
+    })
+  }
+
+  workspace_view = vscode.window.createTreeView('codeWebChatViewWorkspace', {
+    treeDataProvider: workspace_provider,
+    manageCheckboxStateManually: true
+  })
+
+  let context_view = vscode.window.createTreeView('codeWebChatViewContext', {
+    treeDataProvider: context_provider,
+    manageCheckboxStateManually: true
+  })
+
+  register_workspace_view_handlers(workspace_view)
+  register_workspace_view_handlers(context_view)
+
+  const open_editors_view = vscode.window.createTreeView(
+    'codeWebChatViewOpenEditors',
+    {
+      treeDataProvider: open_editors_provider,
+      manageCheckboxStateManually: true
+    }
+  )
+
+  context.subscriptions.push(
+    workspace_provider,
+    open_editors_provider,
+    workspace_view,
+    context_view,
+    open_editors_view
+  )
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('codeWebChat.copyContext', async () => {
+      let context_text = ''
+
+      try {
+        const collected = await files_collector.collect_files()
+        context_text = collected.other_files + collected.recent_files
+      } catch (error: any) {
+        console.error('Error collecting files:', error)
+        vscode.window.showErrorMessage(
+          dictionary.error_message.ERROR_COLLECTING_FILES(error.message)
+        )
+        return
+      }
+
+      if (context_text == '') {
+        vscode.window.showWarningMessage(
+          dictionary.warning_message.NO_FILES_SELECTED
+        )
+        return
+      }
+
+      context_text = `<files>\n${context_text}</files>\n`
+      await vscode.env.clipboard.writeText(context_text)
+      vscode.window.showInformationMessage(
+        dictionary.information_message.CONTEXT_COPIED_TO_CLIPBOARD
+      )
+    }),
+    vscode.commands.registerCommand(
+      'codeWebChat.copyContextOpenEditors',
+      async () => {
+        if (!open_editors_provider) return
+        const checked_files = open_editors_provider.get_checked_files()
+
+        if (checked_files.length == 0) {
+          vscode.window.showWarningMessage(
+            dictionary.warning_message.NO_OPEN_EDITORS_SELECTED
+          )
+          return
+        }
+
+        let context_text = ''
+        const workspace_folders = vscode.workspace.workspaceFolders
+        const is_multi_root =
+          !!workspace_folders && workspace_folders.length > 1
+
+        for (const file_path of checked_files) {
+          try {
+            const file_uri = vscode.Uri.file(file_path)
+            const content_uint8_array =
+              await vscode.workspace.fs.readFile(file_uri)
+
+            let display_path: string
+            const workspace_folder =
+              vscode.workspace.getWorkspaceFolder(file_uri)
+
+            if (is_multi_root && workspace_folder) {
+              const relative_path = path.relative(
+                workspace_folder.uri.fsPath,
+                file_path
+              )
+              display_path = `${workspace_folder.name}:${relative_path}`
+            } else {
+              display_path = vscode.workspace.asRelativePath(file_path)
+            }
+
+            if (is_binary_file(file_path, content_uint8_array)) {
+              context_text += `<file path="${display_path.replace(
+                /\\/g,
+                '/'
+              )}">Binary file</file>\n`
+              continue
+            }
+
+            let content = new TextDecoder().decode(content_uint8_array)
+
+            const range = workspace_provider.get_range(file_path)
+            if (range) {
+              content = workspace_provider.apply_range_to_content(
+                content,
+                range
+              )
+            }
+
+            context_text += `<file path="${display_path.replace(
+              /\\/g,
+              '/'
+            )}">\n${content}\n</file>\n`
+          } catch (error: any) {
+            vscode.window.showErrorMessage(
+              dictionary.error_message.ERROR_READING_FILE(
+                file_path,
+                error.message
+              )
+            )
+          }
+        }
+
+        if (context_text == '') return
+
+        context_text = `<files>\n${context_text}</files>\n`
+        await vscode.env.clipboard.writeText(context_text)
+        vscode.window.showInformationMessage(
+          dictionary.information_message
+            .CONTEXT_FROM_OPEN_EDITORS_COPIED_TO_CLIPBOARD
+        )
+      }
+    ),
+    vscode.commands.registerCommand(
+      'codeWebChat.expandContextFolders',
+      async () => {
+        workspace_provider.set_context_view_collapsible_state(
+          vscode.TreeItemCollapsibleState.Expanded
+        )
+        context_view.dispose()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        context_view = vscode.window.createTreeView('codeWebChatViewContext', {
+          treeDataProvider: context_provider,
+          manageCheckboxStateManually: true
+        })
+
+        register_workspace_view_handlers(context_view)
+        context.subscriptions.push(context_view)
+      }
+    ),
+    vscode.commands.registerCommand(
+      'codeWebChat.collapseContextFolders',
+      async () => {
+        workspace_provider.set_context_view_collapsible_state(
+          vscode.TreeItemCollapsibleState.Collapsed
+        )
+        context_view.dispose()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        context_view = vscode.window.createTreeView('codeWebChatViewContext', {
+          treeDataProvider: context_provider,
+          manageCheckboxStateManually: true
+        })
+
+        register_workspace_view_handlers(context_view)
+        context.subscriptions.push(context_view)
+      }
+    ),
+    vscode.commands.registerCommand(
+      'codeWebChat.collapseWorkspaceFolders',
+      async () => {
+        workspace_provider.set_workspace_view_collapsible_state(
+          vscode.TreeItemCollapsibleState.Collapsed
+        )
+        workspace_view.dispose()
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        workspace_view = vscode.window.createTreeView(
+          'codeWebChatViewWorkspace',
+          {
+            treeDataProvider: workspace_provider!,
+            manageCheckboxStateManually: true
+          }
+        )
+
+        register_workspace_view_handlers(workspace_view)
+        context.subscriptions.push(workspace_view)
+      }
+    ),
+    vscode.commands.registerCommand('codeWebChat.clearChecks', async () => {
+      await workspace_provider!.clear_checks()
+    }),
+    vscode.commands.registerCommand('codeWebChat.checkAll', async () => {
+      await workspace_provider!.check_all()
+    }),
+    vscode.commands.registerCommand(
+      'codeWebChat.clearChecksOpenEditors',
+      () => {
+        open_editors_provider!.clear_checks()
+      }
+    ),
+    vscode.commands.registerCommand(
+      'codeWebChat.checkAllOpenEditors',
+      async () => {
+        await open_editors_provider!.check_all()
+      }
+    ),
+    vscode.commands.registerCommand(
+      'codeWebChat.removeFolderFromWorkspace',
+      async (item: FileItem) => {
+        if (!item?.resourceUri) return
+
+        const folder = vscode.workspace.getWorkspaceFolder(item.resourceUri)
+        if (folder) {
+          vscode.workspace.updateWorkspaceFolders(folder.index, 1)
+        }
+      }
+    )
+  )
+
+  open_editors_view.onDidChangeCheckboxState(async (e) => {
+    for (const [item, state] of e.items) {
+      await open_editors_provider!.update_check_state(item, state)
+    }
+  })
+
+  context.subscriptions.push(
+    workspace_provider.onDidChangeCheckedFiles(() => {
+      update_view_badges()
+    }),
+    open_editors_provider.onDidChangeCheckedFiles(() => {
+      update_view_badges()
+    }),
+    workspace_provider.onDidChangeTreeData(() => {
+      update_view_badges()
+    })
+  )
+
+  // Update badge when tabs change with debouncing to avoid multiple updates
+  let tab_change_timeout: NodeJS.Timeout | null = null
+  context.subscriptions.push(
+    vscode.window.tabGroups.onDidChangeTabs(() => {
+      if (tab_change_timeout) {
+        clearTimeout(tab_change_timeout)
+      }
+      tab_change_timeout = setTimeout(() => {
+        update_view_badges()
+        tab_change_timeout = null
+      }, 100)
+    })
+  )
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(async () => {
+      if (vscode.workspace.workspaceFolders) {
+        await workspace_provider.update_workspace_folders(
+          vscode.workspace.workspaceFolders
+        )
+        open_editors_provider.update_workspace_folders(
+          vscode.workspace.workspaceFolders
+        )
+        shared_context_state.set_providers(
+          workspace_provider,
+          open_editors_provider
+        )
+        update_view_badges()
+      }
+    })
+  )
+
+  workspace_view.onDidCollapseElement(() => {
+    workspace_provider!.refresh()
+  })
+
+  context.subscriptions.push(
+    open_editors_provider.onDidChangeTreeData(() => {
+      if (open_editors_provider!.is_initialized()) {
+        update_view_badges()
+      }
+    })
+  )
+
+  // Also schedule a delayed update for initial badge display
+  setTimeout(() => {
+    update_view_badges()
+  }, 1000) // Wait for 1 second to ensure VS Code has fully loaded
+
+  return {
+    workspace_provider,
+    open_editors_provider,
+    shared_context_state
+  }
+}

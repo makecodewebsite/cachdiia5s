@@ -1,0 +1,291 @@
+import browser from 'webextension-polyfill'
+import { Chat } from '@shared/types/websocket-message'
+import { Chatbot } from './types/chatbot'
+import { Message } from '@/types/messages'
+import {
+  ai_studio,
+  gemini,
+  chatgpt,
+  copilot,
+  claude,
+  mistral,
+  open_webui,
+  deepseek,
+  grok,
+  openrouter,
+  qwen,
+  yuanbao,
+  doubao,
+  meta,
+  kimi,
+  arena,
+  together,
+  github_copilot,
+  hugging_chat,
+  z_ai
+} from './chatbots'
+
+// In case url changes on load
+const current_url = window.location.href
+
+const hash_prefix_new = '#cwc'
+
+const ai_studio_url = 'https://aistudio.google.com/'
+const is_ai_studio = current_url.startsWith(ai_studio_url)
+
+const gemini_url = 'https://gemini.google.com/'
+const is_gemini = current_url.startsWith(gemini_url)
+
+const openrouter_url = 'https://openrouter.ai/chat'
+const is_openrouter = current_url.startsWith(openrouter_url)
+
+const chatgpt_url = 'https://chatgpt.com/'
+const is_chatgpt = current_url.startsWith(chatgpt_url)
+
+const copilot_url = 'https://copilot.microsoft.com/'
+const is_copilot = current_url.startsWith(copilot_url)
+
+const github_copilot_url = 'https://github.com/copilot'
+const is_github_copilot = current_url.startsWith(github_copilot_url)
+
+const claude_url = 'https://claude.ai/'
+const is_claude = current_url.startsWith(claude_url)
+
+const deepseek_url = 'https://chat.deepseek.com/'
+const is_deepseek = current_url.startsWith(deepseek_url)
+
+const mistral_url = 'https://chat.mistral.ai/'
+const is_mistral = current_url.startsWith(mistral_url)
+
+const qwen_url = 'https://chat.qwen.ai/'
+const is_qwen = current_url.startsWith(qwen_url)
+
+const yuanbao_url = 'https://yuanbao.tencent.com/chat'
+const is_yuanbao = current_url.startsWith(yuanbao_url)
+
+const hugging_chat_url = 'https://huggingface.co/chat/'
+const is_hugging_chat = current_url.startsWith(hugging_chat_url)
+
+const arena_url = 'https://arena.ai/'
+const is_arena = current_url.startsWith(arena_url)
+
+const grok_url = 'https://grok.com/'
+const is_grok = current_url.startsWith(grok_url)
+
+const doubao_url = 'https://www.doubao.com/chat/'
+const is_doubao = current_url.startsWith(doubao_url)
+
+const kimi_url = 'https://www.kimi.com/'
+const is_kimi = current_url.startsWith(kimi_url)
+
+const meta_url = 'https://www.meta.ai/'
+const is_meta = current_url.startsWith(meta_url)
+
+const together_url = 'https://chat.together.ai/'
+const is_together = current_url.startsWith(together_url)
+
+const z_ai_url = 'https://chat.z.ai/'
+const is_z_ai = current_url.startsWith(z_ai_url)
+
+const is_open_webui = document.title.includes('Open WebUI')
+
+let chatbot: Chatbot | null = null
+
+if (is_ai_studio) {
+  chatbot = ai_studio
+} else if (is_gemini) {
+  chatbot = gemini
+} else if (is_chatgpt) {
+  chatbot = chatgpt
+} else if (is_copilot) {
+  chatbot = copilot
+} else if (is_github_copilot) {
+  chatbot = github_copilot
+} else if (is_claude) {
+  chatbot = claude
+} else if (is_hugging_chat) {
+  chatbot = hugging_chat
+} else if (is_arena) {
+  chatbot = arena
+} else if (is_mistral) {
+  chatbot = mistral
+} else if (is_open_webui) {
+  chatbot = open_webui
+} else if (is_deepseek) {
+  chatbot = deepseek
+} else if (is_grok) {
+  chatbot = grok
+} else if (is_openrouter) {
+  chatbot = openrouter
+} else if (is_qwen) {
+  chatbot = qwen
+} else if (is_yuanbao) {
+  chatbot = yuanbao
+} else if (is_doubao) {
+  chatbot = doubao
+} else if (is_meta) {
+  chatbot = meta
+} else if (is_kimi) {
+  chatbot = kimi
+} else if (is_together) {
+  chatbot = together
+} else if (is_z_ai) {
+  chatbot = z_ai
+}
+
+const initialize_chat = async (params: { message: string; chat: Chat }) => {
+  if (chatbot?.set_model) {
+    await chatbot.set_model(params.chat)
+  }
+  if (chatbot?.enter_system_instructions) {
+    await chatbot.enter_system_instructions(params.chat)
+  }
+  if (chatbot?.set_temperature) {
+    await chatbot.set_temperature(params.chat)
+  }
+  if (chatbot?.set_top_p) {
+    await chatbot.set_top_p(params.chat)
+  }
+  if (chatbot?.set_thinking_budget) {
+    await chatbot.set_thinking_budget(params.chat)
+  }
+  if (chatbot?.set_reasoning_effort) {
+    await chatbot.set_reasoning_effort(params.chat)
+  }
+  if (chatbot?.set_options) {
+    await chatbot.set_options(params.chat)
+  }
+  if (chatbot?.enter_message) {
+    await chatbot.enter_message({
+      message: params.message
+    })
+  }
+
+  await new Promise<void>((resolve) => {
+    const handle_key_press = (e: KeyboardEvent) => {
+      if (e.key == 'Enter') {
+        document.removeEventListener('keydown', handle_key_press)
+        resolve()
+      }
+    }
+    document.addEventListener('keydown', handle_key_press)
+    setTimeout(resolve, 2000)
+  })
+  browser.runtime.sendMessage<Message>({
+    action: 'chat-initialized'
+  })
+}
+
+const main = async () => {
+  const session_data_key = 'cwc-session-data'
+
+  const hash = window.location.hash
+  const is_cwc_hash = hash.startsWith(hash_prefix_new)
+  const batch_id = hash.substring(hash_prefix_new.length + 1)
+
+  if (is_cwc_hash) {
+    history.replaceState(
+      null,
+      '',
+      window.location.pathname + window.location.search
+    )
+
+    const storage_key = `chat-init:${batch_id}`
+    const storage = await browser.storage.local.get(storage_key)
+    const stored_data = storage[storage_key] as {
+      text: string
+      current_chat: Chat
+      client_id: number
+      raw_instructions?: string
+      edit_format?: string
+      prompt_type?:
+        | 'ask-about-context'
+        | 'edit-context'
+        | 'code-at-cursor'
+        | 'find-relevant-files'
+        | 'no-context'
+    }
+
+    if (!stored_data) {
+      console.error(
+        'Chat initialization data not found for batch ID:',
+        batch_id
+      )
+      return
+    }
+
+    const message_text = stored_data.text
+    const current_chat = stored_data.current_chat
+
+    if (!current_chat) {
+      console.error('Chat configuration not found')
+      return
+    }
+
+    if (chatbot?.wait_until_ready) {
+      await chatbot.wait_until_ready()
+    }
+
+    await initialize_chat({
+      message: message_text,
+      chat: current_chat
+    })
+
+    await browser.storage.local.remove(storage_key)
+
+    if (chatbot?.setup_observer) {
+      const inject_button =
+        stored_data.prompt_type == 'edit-context' ||
+        stored_data.prompt_type == 'code-at-cursor' ||
+        stored_data.prompt_type == 'find-relevant-files'
+
+      sessionStorage.setItem(
+        session_data_key,
+        JSON.stringify({
+          client_id: stored_data.client_id,
+          raw_instructions: stored_data.raw_instructions,
+          edit_format: stored_data.edit_format,
+          inject_button
+        })
+      )
+      chatbot.setup_observer({
+        client_id: stored_data.client_id,
+        raw_instructions: stored_data.raw_instructions,
+        edit_format: stored_data.edit_format,
+        inject_button
+      })
+    } else {
+      sessionStorage.removeItem(session_data_key)
+    }
+  } else {
+    const session_data_str = sessionStorage.getItem(session_data_key)
+    if (session_data_str && chatbot) {
+      try {
+        const session_data = JSON.parse(session_data_str)
+        if (chatbot.setup_observer) {
+          chatbot.setup_observer({
+            client_id: session_data.client_id,
+            raw_instructions: session_data.raw_instructions,
+            edit_format: session_data.edit_format,
+            inject_button: session_data.inject_button ?? true
+          })
+        }
+      } catch (e) {
+        console.error('Failed to parse CWC session data', e)
+      }
+    }
+  }
+}
+
+// Hash changes when reusing a tab
+window.addEventListener('hashchange', () => {
+  if (window.location.hash.startsWith(hash_prefix_new)) {
+    main()
+  }
+})
+
+if (document.readyState == 'loading') {
+  document.addEventListener('DOMContentLoaded', main)
+} else {
+  main()
+}

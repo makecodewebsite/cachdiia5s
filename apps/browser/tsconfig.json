@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["dom", "ESNext"],
+    "module": "commonjs",
+    "outDir": "out",
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "baseUrl": ".",
+    "strict": true,
+    "jsx": "react-jsx",
+    "types": ["chrome", "webextension-polyfill", "node", "jest"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@shared/*": ["../../packages/shared/src/*"],
+      "@ui/*": ["../../packages/ui/src/*"]
+    }
+  },
+  "include": [
+    "src/**/*",
+    "../../packages/shared/src/**/*",
+    "../../packages/ui/src/**/*"
+  ]
+}

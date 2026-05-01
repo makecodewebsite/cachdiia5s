@@ -1,0 +1,23 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  &__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+  }
+
+  &__label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--vscode-foreground);
+  }
+
+  &__info {
+    font-size: 12px;
+    color: var(--cwc-text-color-dimmed);
+  }
+}

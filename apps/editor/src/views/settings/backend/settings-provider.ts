@@ -1,0 +1,321 @@
+import * as vscode from 'vscode'
+import {
+  BackendMessage,
+  FrontendMessage
+} from '@/views/settings/types/messages'
+import {
+  handle_upsert_model_provider,
+  handle_delete_configuration,
+  handle_delete_model_provider,
+  handle_get_check_new_files,
+  handle_get_clear_checks_in_workspace_behavior,
+  handle_get_are_automatic_checkpoints_disabled,
+  handle_get_configurations,
+  handle_get_commit_message_instructions,
+  handle_get_voice_input_instructions,
+  handle_get_voice_input_push_to_talk,
+  handle_get_include_prompts_in_commit_messages,
+  handle_update_include_prompts_in_commit_messages,
+  handle_get_context_size_warning_threshold,
+  handle_get_edit_context_system_instructions,
+  handle_get_edit_format_instructions,
+  handle_get_gemini_user_id,
+  handle_get_ai_studio_user_id,
+  handle_get_model_providers,
+  handle_get_send_with_shift_enter,
+  handle_get_reuse_last_tab,
+  handle_update_checkpoint_lifespan,
+  handle_get_checkpoint_lifespan,
+  handle_reorder_configuration,
+  handle_reorder_model_providers,
+  handle_set_default_configuration,
+  handle_select_default_configuration,
+  handle_update_check_new_files,
+  handle_update_clear_checks_in_workspace_behavior,
+  handle_update_are_automatic_checkpoints_disabled,
+  handle_update_commit_message_instructions,
+  handle_update_voice_input_instructions,
+  handle_update_voice_input_push_to_talk,
+  handle_update_context_size_warning_threshold,
+  handle_update_edit_context_system_instructions,
+  handle_update_edit_format_instructions,
+  handle_update_gemini_user_id,
+  handle_update_ai_studio_user_id,
+  handle_update_send_with_shift_enter,
+  handle_update_reuse_last_tab,
+  handle_upsert_configuration,
+  handle_open_ignore_patterns_settings,
+  handle_open_allow_patterns_settings,
+  handle_get_fix_all_automatically,
+  handle_update_fix_all_automatically,
+  handle_get_extended_cache_duration_for_anthropic,
+  handle_update_extended_cache_duration_for_anthropic,
+  handle_open_keybindings,
+  handle_open_external_url
+} from './message-handlers'
+
+export class SettingsProvider {
+  private _webview_panel: vscode.WebviewPanel | undefined
+  private _disposables: vscode.Disposable[] = []
+  private _pending_section_to_show: string | undefined
+
+  constructor(
+    private readonly _extensionUri: vscode.Uri,
+    public readonly context: vscode.ExtensionContext
+  ) {}
+
+  public createOrShow(section_to_show?: string) {
+    const column = vscode.window.activeTextEditor
+      ? vscode.window.activeTextEditor.viewColumn
+      : undefined
+
+    if (this._webview_panel) {
+      this._webview_panel.reveal(column)
+      if (section_to_show) {
+        this.postMessage({
+          command: 'SHOW_SECTION',
+          section: section_to_show
+        })
+      }
+      return
+    }
+
+    this._pending_section_to_show = section_to_show
+
+    this._webview_panel = vscode.window.createWebviewPanel(
+      'codeWebChatSettings',
+      'Settings',
+      column || vscode.ViewColumn.One,
+      {
+        enableScripts: true,
+        localResourceRoots: [this._extensionUri]
+      }
+    )
+
+    this._webview_panel.iconPath = new vscode.ThemeIcon('gear') as any
+
+    this._webview_panel.onDidDispose(() => {
+      this._webview_panel = undefined
+      this._disposables.forEach((d) => d.dispose())
+      this._disposables = []
+    }, null)
+
+    this._webview_panel.webview.html = this._getHtmlForWebview(
+      this._webview_panel.webview
+    )
+
+    this._webview_panel.webview.onDidReceiveMessage(
+      async (message: FrontendMessage) => {
+        if (message.command == 'SETTINGS_UI_READY') {
+          if (this._pending_section_to_show) {
+            this.postMessage({
+              command: 'SHOW_SECTION',
+              section: this._pending_section_to_show
+            })
+            this._pending_section_to_show = undefined
+          }
+        } else if (message.command == 'GET_MODEL_PROVIDERS') {
+          await handle_get_model_providers(this)
+        } else if (message.command == 'REORDER_MODEL_PROVIDERS') {
+          await handle_reorder_model_providers(this, message)
+        } else if (message.command == 'ADD_MODEL_PROVIDER') {
+          await handle_upsert_model_provider({
+            provider: this,
+            insertion_index: message.insertion_index,
+            create_on_top: message.create_on_top
+          })
+        } else if (message.command == 'DELETE_MODEL_PROVIDER') {
+          await handle_delete_model_provider(this, message)
+        } else if (message.command == 'EDIT_CUSTOM_MODEL_PROVIDER') {
+          await handle_upsert_model_provider({
+            provider: this,
+            provider_name: message.provider_name
+          })
+        } else if (message.command == 'GET_CONFIGURATIONS') {
+          await handle_get_configurations(this)
+        } else if (message.command == 'REORDER_CONFIGURATIONS') {
+          await handle_reorder_configuration(this, message.configurations)
+        } else if (message.command == 'DELETE_CONFIGURATION') {
+          await handle_delete_configuration(this, message.configuration_id)
+        } else if (message.command == 'SET_DEFAULT_CONFIGURATION') {
+          await handle_set_default_configuration(
+            this,
+            message.configuration_id,
+            message.tool_name
+          )
+        } else if (message.command == 'SELECT_DEFAULT_CONFIGURATION') {
+          await handle_select_default_configuration(this, message)
+        } else if (message.command == 'GET_EDIT_CONTEXT_SYSTEM_INSTRUCTIONS') {
+          await handle_get_edit_context_system_instructions(this)
+        } else if (
+          message.command == 'UPDATE_EDIT_CONTEXT_SYSTEM_INSTRUCTIONS'
+        ) {
+          await handle_update_edit_context_system_instructions(message)
+        } else if (message.command == 'GET_EDIT_FORMAT_INSTRUCTIONS') {
+          await handle_get_edit_format_instructions(this)
+        } else if (message.command == 'UPDATE_EDIT_FORMAT_INSTRUCTIONS') {
+          await handle_update_edit_format_instructions(message)
+        } else if (message.command == 'GET_COMMIT_MESSAGE_INSTRUCTIONS') {
+          await handle_get_commit_message_instructions(this)
+        } else if (message.command == 'UPDATE_COMMIT_MESSAGE_INSTRUCTIONS') {
+          await handle_update_commit_message_instructions(message)
+        } else if (
+          message.command == 'GET_INCLUDE_PROMPTS_IN_COMMIT_MESSAGES'
+        ) {
+          await handle_get_include_prompts_in_commit_messages(this)
+        } else if (
+          message.command == 'UPDATE_INCLUDE_PROMPTS_IN_COMMIT_MESSAGES'
+        ) {
+          await handle_update_include_prompts_in_commit_messages(message)
+        } else if (message.command == 'GET_VOICE_INPUT_INSTRUCTIONS') {
+          await handle_get_voice_input_instructions(this)
+        } else if (message.command == 'UPDATE_VOICE_INPUT_INSTRUCTIONS') {
+          await handle_update_voice_input_instructions(message)
+        } else if (message.command == 'GET_VOICE_INPUT_PUSH_TO_TALK') {
+          await handle_get_voice_input_push_to_talk(this)
+        } else if (message.command == 'UPDATE_VOICE_INPUT_PUSH_TO_TALK') {
+          await handle_update_voice_input_push_to_talk(message)
+        } else if (message.command == 'GET_CONTEXT_SIZE_WARNING_THRESHOLD') {
+          await handle_get_context_size_warning_threshold(this)
+        } else if (message.command == 'UPDATE_CONTEXT_SIZE_WARNING_THRESHOLD') {
+          await handle_update_context_size_warning_threshold(message)
+        } else if (
+          message.command == 'GET_CLEAR_CHECKS_IN_WORKSPACE_BEHAVIOR'
+        ) {
+          await handle_get_clear_checks_in_workspace_behavior(this)
+        } else if (
+          message.command == 'UPDATE_CLEAR_CHECKS_IN_WORKSPACE_BEHAVIOR'
+        ) {
+          await handle_update_clear_checks_in_workspace_behavior(message)
+        } else if (message.command == 'GET_GEMINI_USER_ID') {
+          await handle_get_gemini_user_id(this)
+        } else if (message.command == 'UPDATE_GEMINI_USER_ID') {
+          await handle_update_gemini_user_id(message)
+        } else if (message.command == 'GET_AI_STUDIO_USER_ID') {
+          await handle_get_ai_studio_user_id(this)
+        } else if (message.command == 'UPDATE_AI_STUDIO_USER_ID') {
+          await handle_update_ai_studio_user_id(message)
+        } else if (message.command == 'GET_CHECKPOINT_LIFESPAN') {
+          await handle_get_checkpoint_lifespan(this)
+        } else if (message.command == 'GET_SEND_WITH_SHIFT_ENTER') {
+          await handle_get_send_with_shift_enter(this)
+        } else if (message.command == 'UPDATE_SEND_WITH_SHIFT_ENTER') {
+          await handle_update_send_with_shift_enter(message)
+        } else if (message.command == 'GET_CHECK_NEW_FILES') {
+          await handle_get_check_new_files(this)
+        } else if (message.command == 'UPDATE_CHECK_NEW_FILES') {
+          await handle_update_check_new_files(message)
+        } else if (message.command == 'GET_REUSE_LAST_TAB') {
+          await handle_get_reuse_last_tab(this)
+        } else if (message.command == 'UPDATE_REUSE_LAST_TAB') {
+          await handle_update_reuse_last_tab(message)
+        } else if (
+          message.command == 'GET_ARE_AUTOMATIC_CHECKPOINTS_DISABLED'
+        ) {
+          await handle_get_are_automatic_checkpoints_disabled(this)
+        } else if (
+          message.command == 'UPDATE_ARE_AUTOMATIC_CHECKPOINTS_DISABLED'
+        ) {
+          await handle_update_are_automatic_checkpoints_disabled(message)
+        } else if (message.command == 'UPDATE_CHECKPOINT_LIFESPAN') {
+          await handle_update_checkpoint_lifespan(message)
+        } else if (message.command == 'OPEN_EDITOR_SETTINGS') {
+          await vscode.commands.executeCommand('workbench.action.openSettings')
+        } else if (message.command == 'OPEN_IGNORE_PATTERNS_SETTINGS') {
+          await handle_open_ignore_patterns_settings()
+        } else if (message.command == 'OPEN_ALLOW_PATTERNS_SETTINGS') {
+          await handle_open_allow_patterns_settings()
+        } else if (message.command == 'UPSERT_CONFIGURATION') {
+          await handle_upsert_configuration(this, message)
+        } else if (message.command == 'GET_FIX_ALL_AUTOMATICALLY') {
+          await handle_get_fix_all_automatically(this)
+        } else if (message.command == 'UPDATE_FIX_ALL_AUTOMATICALLY') {
+          await handle_update_fix_all_automatically(message)
+        } else if (
+          message.command == 'GET_EXTENDED_CACHE_DURATION_FOR_ANTHROPIC'
+        ) {
+          await handle_get_extended_cache_duration_for_anthropic(this)
+        } else if (
+          message.command == 'UPDATE_EXTENDED_CACHE_DURATION_FOR_ANTHROPIC'
+        ) {
+          await handle_update_extended_cache_duration_for_anthropic(message)
+        } else if (message.command == 'OPEN_KEYBINDINGS') {
+          await handle_open_keybindings(message)
+        } else if (message.command == 'OPEN_EXTERNAL_URL') {
+          await handle_open_external_url(message)
+        }
+      },
+      null,
+      this._disposables
+    )
+
+    this._disposables.push(
+      vscode.workspace.onDidChangeConfiguration((e) => {
+        if (e.affectsConfiguration('codeWebChat')) {
+          void handle_get_model_providers(this)
+          void handle_get_configurations(this)
+          void handle_get_edit_context_system_instructions(this)
+          void handle_get_edit_format_instructions(this)
+          void handle_get_context_size_warning_threshold(this)
+          void handle_get_commit_message_instructions(this)
+          void handle_get_voice_input_instructions(this)
+          void handle_get_voice_input_push_to_talk(this)
+          void handle_get_include_prompts_in_commit_messages(this)
+          void handle_get_clear_checks_in_workspace_behavior(this)
+          void handle_get_are_automatic_checkpoints_disabled(this)
+          void handle_get_checkpoint_lifespan(this)
+          void handle_get_gemini_user_id(this)
+          void handle_get_ai_studio_user_id(this)
+          void handle_get_send_with_shift_enter(this)
+          void handle_get_check_new_files(this)
+          void handle_get_reuse_last_tab(this)
+          void handle_get_fix_all_automatically(this)
+          void handle_get_extended_cache_duration_for_anthropic(this)
+        }
+      })
+    )
+  }
+
+  public postMessage(message: BackendMessage) {
+    if (this._webview_panel) {
+      this._webview_panel.webview.postMessage(message)
+    }
+  }
+
+  private _getHtmlForWebview(webview: vscode.Webview) {
+    const scriptUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'out', 'settings.js')
+    )
+    const styleUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this._extensionUri, 'out', 'settings.css')
+    )
+
+    const bangers_font_uri = webview.asWebviewUri(
+      vscode.Uri.joinPath(
+        this._extensionUri,
+        'resources',
+        'Bangers-Regular.ttf'
+      )
+    )
+
+    return `<!DOCTYPE html>
+<html lang="${vscode.env.language}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="${styleUri}">
+  <style>
+    @font-face {
+      font-family: 'Bangers';
+      src: url('${bangers_font_uri}') format('truetype');
+    }
+  </style>
+  <title>Settings</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="${scriptUri}"></script>
+</body>
+</html>`
+  }
+}

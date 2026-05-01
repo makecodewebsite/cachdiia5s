@@ -1,0 +1,61 @@
+import { WebPromptType } from './prompt-types'
+
+export type Chat = {
+  url: string
+  model?: string
+  temperature?: number
+  thinking_budget?: number
+  reasoning_effort?: string
+  top_p?: number
+  system_instructions?: string
+  options?: string[]
+}
+
+export type ConnectedBrowser = {
+  id: number
+  version: string
+  user_agent: string
+}
+
+export type InitializeChatMessage = {
+  action: 'initialize-chat'
+  text: string
+  url: string
+  client_id: number // Client ID to identify which editor sent this message
+  model?: string
+  target_browser_id?: number
+  temperature?: number
+  thinking_budget?: number
+  reasoning_effort?: string
+  top_p?: number
+  system_instructions?: string
+  options?: string[]
+  raw_instructions?: string
+  edit_format?: string
+  prompt_type?: WebPromptType
+  reuse_last_tab?: boolean
+}
+
+export type BrowserConnectionStatusMessage = {
+  action: 'browser-connection-status'
+  connected_browsers: ConnectedBrowser[]
+}
+
+export type ApplyChatResponseMessage = {
+  action: 'apply-chat-response'
+  client_id: number
+  raw_instructions?: string
+  edit_format?: string
+  url?: string
+}
+
+export type ClientIdAssignmentMessage = {
+  action: 'client-id-assignment'
+  client_id: number
+}
+
+export type WebSocketMessage =
+  | InitializeChatMessage
+  | BrowserConnectionStatusMessage
+  | ClientIdAssignmentMessage
+  | ApplyChatResponseMessage

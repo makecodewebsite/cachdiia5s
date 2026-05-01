@@ -1,0 +1,460 @@
+import { useEffect, useState } from 'react'
+import {
+  BackendMessage,
+  EditFormatInstructions,
+  ConfigurationForClient,
+  ProviderForClient,
+  FrontendMessage
+} from '@/views/settings/types/messages'
+import { ToolType } from '@/views/settings/types/tools'
+import { post_message } from '../utils/post-message'
+
+export const use_settings = (vscode: any) => {
+  const [providers, set_providers] = useState<ProviderForClient[] | undefined>(
+    undefined
+  )
+  const [configurations, set_configurations] = useState<
+    ConfigurationForClient[] | undefined
+  >(undefined)
+  const [defaults, set_defaults] = useState<
+    Record<ToolType, string | null> | undefined
+  >(undefined)
+  const [commit_message_instructions, set_commit_message_instructions] =
+    useState<string | undefined>(undefined)
+  const [voice_input_instructions, set_voice_input_instructions] = useState<
+    string | undefined
+  >(undefined)
+  const [voice_input_push_to_talk, set_voice_input_push_to_talk] = useState<
+    boolean | undefined
+  >(undefined)
+  const [
+    include_prompts_in_commit_messages,
+    set_include_prompts_in_commit_messages
+  ] = useState<boolean | undefined>(undefined)
+  const [
+    edit_context_system_instructions,
+    set_edit_context_system_instructions
+  ] = useState<string | undefined>(undefined)
+  const [context_size_warning_threshold, set_context_size_warning_threshold] =
+    useState<number>()
+  const [edit_format_instructions, set_edit_format_instructions] = useState<
+    EditFormatInstructions | undefined
+  >(undefined)
+  const [
+    are_automatic_checkpoints_disabled,
+    set_are_automatic_checkpoints_disabled
+  ] = useState<boolean | undefined>(undefined)
+  const [checkpoint_lifespan, set_checkpoint_lifespan] = useState<
+    number | undefined
+  >(undefined)
+  const [gemini_user_id, set_gemini_user_id] = useState<
+    number | null | undefined
+  >(undefined)
+  const [ai_studio_user_id, set_ai_studio_user_id] = useState<
+    number | null | undefined
+  >(undefined)
+  const [send_with_shift_enter, set_send_with_shift_enter] = useState<
+    boolean | undefined
+  >(undefined)
+  const [check_new_files, set_check_new_files] = useState<boolean | undefined>(
+    undefined
+  )
+  const [reuse_last_tab, set_reuse_last_tab] = useState<boolean | undefined>(
+    undefined
+  )
+  const [
+    clear_checks_in_workspace_behavior,
+    set_clear_checks_in_workspace_behavior
+  ] = useState<'ignore-open-editors' | 'uncheck-all' | undefined>(undefined)
+  const [fix_all_automatically, set_fix_all_automatically] = useState<
+    boolean | undefined
+  >(undefined)
+  const [
+    extended_cache_duration_for_anthropic,
+    set_extended_cache_duration_for_anthropic
+  ] = useState<boolean | undefined>(undefined)
+
+  useEffect(() => {
+    post_message(vscode, { command: 'GET_MODEL_PROVIDERS' })
+    post_message(vscode, { command: 'GET_CONFIGURATIONS' })
+    post_message(vscode, { command: 'GET_EDIT_CONTEXT_SYSTEM_INSTRUCTIONS' })
+    post_message(vscode, { command: 'GET_COMMIT_MESSAGE_INSTRUCTIONS' })
+    post_message(vscode, { command: 'GET_INCLUDE_PROMPTS_IN_COMMIT_MESSAGES' })
+    post_message(vscode, { command: 'GET_VOICE_INPUT_INSTRUCTIONS' })
+    post_message(vscode, { command: 'GET_VOICE_INPUT_PUSH_TO_TALK' })
+    post_message(vscode, { command: 'GET_CONTEXT_SIZE_WARNING_THRESHOLD' })
+    post_message(vscode, { command: 'GET_EDIT_FORMAT_INSTRUCTIONS' })
+    post_message(vscode, { command: 'GET_ARE_AUTOMATIC_CHECKPOINTS_DISABLED' })
+    post_message(vscode, { command: 'GET_CHECKPOINT_LIFESPAN' })
+    post_message(vscode, { command: 'GET_GEMINI_USER_ID' })
+    post_message(vscode, { command: 'GET_AI_STUDIO_USER_ID' })
+    post_message(vscode, { command: 'GET_SEND_WITH_SHIFT_ENTER' })
+    post_message(vscode, { command: 'GET_CHECK_NEW_FILES' })
+    post_message(vscode, { command: 'GET_REUSE_LAST_TAB' })
+    post_message(vscode, { command: 'GET_CLEAR_CHECKS_IN_WORKSPACE_BEHAVIOR' })
+    post_message(vscode, { command: 'GET_FIX_ALL_AUTOMATICALLY' })
+    post_message(vscode, {
+      command: 'GET_EXTENDED_CACHE_DURATION_FOR_ANTHROPIC'
+    })
+  }, [vscode])
+
+  useEffect(() => {
+    const handle_message = (event: MessageEvent<BackendMessage>) => {
+      const message = event.data
+      if (message.command == 'MODEL_PROVIDERS') {
+        set_providers(message.providers)
+      } else if (message.command == 'CONFIGURATIONS') {
+        set_configurations(message.configurations)
+        set_defaults(message.defaults)
+      } else if (message.command == 'EDIT_CONTEXT_SYSTEM_INSTRUCTIONS') {
+        set_edit_context_system_instructions(message.instructions)
+      } else if (message.command == 'COMMIT_MESSAGE_INSTRUCTIONS') {
+        set_commit_message_instructions(message.instructions)
+      } else if (message.command == 'INCLUDE_PROMPTS_IN_COMMIT_MESSAGES') {
+        set_include_prompts_in_commit_messages(message.enabled)
+      } else if (message.command == 'VOICE_INPUT_INSTRUCTIONS') {
+        set_voice_input_instructions(message.instructions)
+      } else if (message.command == 'VOICE_INPUT_PUSH_TO_TALK') {
+        set_voice_input_push_to_talk(message.enabled)
+      } else if (message.command == 'CONTEXT_SIZE_WARNING_THRESHOLD') {
+        set_context_size_warning_threshold(message.threshold)
+      } else if (message.command == 'EDIT_FORMAT_INSTRUCTIONS') {
+        set_edit_format_instructions(message.instructions)
+      } else if (message.command == 'ARE_AUTOMATIC_CHECKPOINTS_DISABLED') {
+        set_are_automatic_checkpoints_disabled(message.disabled)
+      } else if (message.command == 'CHECKPOINT_LIFESPAN') {
+        set_checkpoint_lifespan(message.hours)
+      } else if (message.command == 'GEMINI_USER_ID') {
+        set_gemini_user_id(message.geminiUserId)
+      } else if (message.command == 'AI_STUDIO_USER_ID') {
+        set_ai_studio_user_id(message.aiStudioUserId)
+      } else if (message.command == 'SEND_WITH_SHIFT_ENTER') {
+        set_send_with_shift_enter(message.enabled)
+      } else if (message.command == 'CHECK_NEW_FILES') {
+        set_check_new_files(message.enabled)
+      } else if (message.command == 'REUSE_LAST_TAB') {
+        set_reuse_last_tab(message.enabled)
+      } else if (message.command == 'CLEAR_CHECKS_IN_WORKSPACE_BEHAVIOR') {
+        set_clear_checks_in_workspace_behavior(message.value)
+      } else if (message.command == 'FIX_ALL_AUTOMATICALLY') {
+        set_fix_all_automatically(message.enabled)
+      } else if (message.command == 'EXTENDED_CACHE_DURATION_FOR_ANTHROPIC') {
+        set_extended_cache_duration_for_anthropic(message.enabled)
+      }
+    }
+
+    window.addEventListener('message', handle_message)
+
+    return () => {
+      window.removeEventListener('message', handle_message)
+    }
+  }, [])
+
+  const handle_reorder_providers = (
+    reordered_providers: ProviderForClient[]
+  ) => {
+    set_providers(reordered_providers)
+    post_message(vscode, {
+      command: 'REORDER_MODEL_PROVIDERS',
+      providers: reordered_providers
+    })
+  }
+
+  const handle_add_provider = (params?: {
+    insertion_index?: number
+    create_on_top?: boolean
+  }) => {
+    post_message(vscode, {
+      command: 'ADD_MODEL_PROVIDER',
+      insertion_index: params?.insertion_index,
+      create_on_top: params?.create_on_top
+    })
+  }
+
+  const handle_delete_provider = (provider_name: string) => {
+    post_message(vscode, {
+      command: 'DELETE_MODEL_PROVIDER',
+      provider_name
+    })
+  }
+
+  const handle_edit_provider = (provider_name: string) => {
+    post_message(vscode, {
+      command: 'EDIT_CUSTOM_MODEL_PROVIDER',
+      provider_name
+    })
+  }
+
+  const handle_add_config = (params?: {
+    insertion_index?: number
+    create_on_top?: boolean
+  }) => {
+    post_message(vscode, {
+      command: 'UPSERT_CONFIGURATION',
+      insertion_index: params?.insertion_index,
+      create_on_top: params?.create_on_top
+    })
+  }
+
+  const handle_reorder_configs = (reordered: ConfigurationForClient[]) => {
+    post_message(vscode, {
+      command: 'REORDER_CONFIGURATIONS',
+      configurations: reordered
+    } as FrontendMessage)
+  }
+
+  const handle_edit_config = (configuration_id: string) => {
+    post_message(vscode, {
+      command: 'UPSERT_CONFIGURATION',
+      configuration_id
+    })
+  }
+
+  const handle_duplicate_config = (configuration_id: string) => {
+    post_message(vscode, {
+      command: 'UPSERT_CONFIGURATION',
+      duplicate_from_id: configuration_id
+    })
+  }
+
+  const handle_delete_config = (configuration_id: string) => {
+    post_message(vscode, {
+      command: 'DELETE_CONFIGURATION',
+      configuration_id
+    } as FrontendMessage)
+  }
+
+  const handle_set_default_config = (
+    tool_name: ToolType,
+    configuration_id: string | null
+  ) => {
+    if (defaults) {
+      set_defaults({ ...defaults, [tool_name]: configuration_id })
+    }
+    post_message(vscode, {
+      command: 'SET_DEFAULT_CONFIGURATION',
+      tool_name,
+      configuration_id
+    } as FrontendMessage)
+  }
+
+  const handle_select_default_config = (tool_name: ToolType) => {
+    post_message(vscode, {
+      command: 'SELECT_DEFAULT_CONFIGURATION',
+      tool_name
+    } as FrontendMessage)
+  }
+
+  const handle_commit_instructions_change = (instructions: string) =>
+    post_message(vscode, {
+      command: 'UPDATE_COMMIT_MESSAGE_INSTRUCTIONS',
+      instructions
+    })
+
+  const handle_include_prompts_in_commit_messages_change = (
+    enabled: boolean
+  ) => {
+    set_include_prompts_in_commit_messages(enabled)
+    post_message(vscode, {
+      command: 'UPDATE_INCLUDE_PROMPTS_IN_COMMIT_MESSAGES',
+      enabled
+    })
+  }
+
+  const handle_voice_input_instructions_change = (instructions: string) =>
+    post_message(vscode, {
+      command: 'UPDATE_VOICE_INPUT_INSTRUCTIONS',
+      instructions
+    })
+
+  const handle_voice_input_push_to_talk_change = (enabled: boolean) => {
+    set_voice_input_push_to_talk(enabled)
+    post_message(vscode, {
+      command: 'UPDATE_VOICE_INPUT_PUSH_TO_TALK',
+      enabled
+    })
+  }
+
+  const handle_edit_context_system_instructions_change = (
+    instructions: string
+  ) =>
+    post_message(vscode, {
+      command: 'UPDATE_EDIT_CONTEXT_SYSTEM_INSTRUCTIONS',
+      instructions
+    })
+
+  const handle_open_editor_settings = () =>
+    post_message(vscode, { command: 'OPEN_EDITOR_SETTINGS' })
+
+  const handle_open_ignore_patterns_settings = () =>
+    post_message(vscode, { command: 'OPEN_IGNORE_PATTERNS_SETTINGS' })
+
+  const handle_open_allow_patterns_settings = () =>
+    post_message(vscode, { command: 'OPEN_ALLOW_PATTERNS_SETTINGS' })
+
+  const handle_context_size_warning_threshold_change = (
+    threshold: number | undefined
+  ) =>
+    post_message(vscode, {
+      command: 'UPDATE_CONTEXT_SIZE_WARNING_THRESHOLD',
+      threshold: threshold ?? null
+    })
+
+  const handle_edit_format_instructions_change = (
+    instructions: EditFormatInstructions
+  ) =>
+    post_message(vscode, {
+      command: 'UPDATE_EDIT_FORMAT_INSTRUCTIONS',
+      instructions
+    })
+
+  const handle_automatic_checkpoints_toggle = (disabled: boolean) => {
+    set_are_automatic_checkpoints_disabled(disabled)
+    post_message(vscode, {
+      command: 'UPDATE_ARE_AUTOMATIC_CHECKPOINTS_DISABLED',
+      disabled
+    })
+  }
+
+  const handle_checkpoint_lifespan_change = (hours: number | undefined) =>
+    post_message(vscode, {
+      command: 'UPDATE_CHECKPOINT_LIFESPAN',
+      hours: hours ?? null
+    })
+
+  const handle_gemini_user_id_change = (geminiUserId: number | null) =>
+    post_message(vscode, {
+      command: 'UPDATE_GEMINI_USER_ID',
+      geminiUserId
+    })
+
+  const handle_ai_studio_user_id_change = (aiStudioUserId: number | null) =>
+    post_message(vscode, {
+      command: 'UPDATE_AI_STUDIO_USER_ID',
+      aiStudioUserId
+    })
+
+  const handle_send_with_shift_enter_change = (enabled: boolean) => {
+    set_send_with_shift_enter(enabled)
+    post_message(vscode, {
+      command: 'UPDATE_SEND_WITH_SHIFT_ENTER',
+      enabled
+    })
+  }
+
+  const handle_check_new_files_change = (enabled: boolean) => {
+    set_check_new_files(enabled)
+    post_message(vscode, {
+      command: 'UPDATE_CHECK_NEW_FILES',
+      enabled
+    })
+  }
+
+  const handle_reuse_last_tab_change = (enabled: boolean) => {
+    set_reuse_last_tab(enabled)
+    post_message(vscode, {
+      command: 'UPDATE_REUSE_LAST_TAB',
+      enabled
+    })
+  }
+
+  const handle_clear_checks_in_workspace_behavior_change = (
+    value: 'ignore-open-editors' | 'uncheck-all'
+  ) => {
+    set_clear_checks_in_workspace_behavior(value)
+    post_message(vscode, {
+      command: 'UPDATE_CLEAR_CHECKS_IN_WORKSPACE_BEHAVIOR',
+      value
+    })
+  }
+
+  const handle_fix_all_automatically_change = (enabled: boolean) => {
+    set_fix_all_automatically(enabled)
+    post_message(vscode, {
+      command: 'UPDATE_FIX_ALL_AUTOMATICALLY',
+      enabled
+    })
+  }
+
+  const handle_extended_cache_duration_for_anthropic_change = (
+    enabled: boolean
+  ) => {
+    set_extended_cache_duration_for_anthropic(enabled)
+    post_message(vscode, {
+      command: 'UPDATE_EXTENDED_CACHE_DURATION_FOR_ANTHROPIC',
+      enabled
+    })
+  }
+
+  const handle_open_keybindings = (search?: string) => {
+    post_message(vscode, {
+      command: 'OPEN_KEYBINDINGS',
+      search
+    })
+  }
+
+  const handle_open_external_url = (url: string) => {
+    post_message(vscode, {
+      command: 'OPEN_EXTERNAL_URL',
+      url
+    })
+  }
+
+  return {
+    providers,
+    set_providers,
+    configurations,
+    set_configurations,
+    defaults,
+    voice_input_instructions,
+    voice_input_push_to_talk,
+    commit_message_instructions,
+    include_prompts_in_commit_messages,
+    edit_context_system_instructions,
+    context_size_warning_threshold,
+    edit_format_instructions,
+    are_automatic_checkpoints_disabled,
+    checkpoint_lifespan,
+    gemini_user_id,
+    ai_studio_user_id,
+    send_with_shift_enter,
+    check_new_files,
+    reuse_last_tab,
+    clear_checks_in_workspace_behavior,
+    fix_all_automatically,
+    extended_cache_duration_for_anthropic,
+    handle_reorder_providers,
+    handle_add_provider,
+    handle_delete_provider,
+    handle_edit_provider,
+    handle_add_config,
+    handle_reorder_configs,
+    handle_edit_config,
+    handle_duplicate_config,
+    handle_delete_config,
+    handle_set_default_config,
+    handle_select_default_config,
+    handle_voice_input_instructions_change,
+    handle_voice_input_push_to_talk_change,
+    handle_commit_instructions_change,
+    handle_include_prompts_in_commit_messages_change,
+    handle_edit_context_system_instructions_change,
+    handle_open_editor_settings,
+    handle_open_ignore_patterns_settings,
+    handle_open_allow_patterns_settings,
+    handle_context_size_warning_threshold_change,
+    handle_edit_format_instructions_change,
+    handle_automatic_checkpoints_toggle,
+    handle_checkpoint_lifespan_change,
+    handle_gemini_user_id_change,
+    handle_ai_studio_user_id_change,
+    handle_send_with_shift_enter_change,
+    handle_check_new_files_change,
+    handle_reuse_last_tab_change,
+    handle_clear_checks_in_workspace_behavior_change,
+    handle_fix_all_automatically_change,
+    handle_extended_cache_duration_for_anthropic_change,
+    handle_open_keybindings,
+    handle_open_external_url
+  }
+}
